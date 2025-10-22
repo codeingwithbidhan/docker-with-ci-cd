@@ -9,7 +9,7 @@ export default function App() {
   return (
     <Router>
       <Navbar />
-      <div className="p-6">
+      <div className="p-4 md:p-8 max-w-screen-lg mx-auto">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/users" element={<Users />} />
