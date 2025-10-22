@@ -31,7 +31,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./backend
-          file: Dockerfile.production
+          file: ./backend/Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/laravel-backend:latest
           no-cache: true
@@ -41,7 +41,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
-          file: Dockerfile.production
+          file: .frontend/Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
           no-cache: true
