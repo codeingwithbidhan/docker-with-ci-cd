@@ -41,7 +41,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./frontend
-          file: .frontend/Dockerfile.production
+          file: ./frontend/Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
           no-cache: true
