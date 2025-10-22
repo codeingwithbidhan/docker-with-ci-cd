@@ -31,9 +31,10 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./backend
-          file: Dockerfile.prod
+          file: Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+          no-cache: true
 
       # Step 5: Build and Push React Frontend
       - name: Build & Push React Frontend
@@ -43,6 +44,7 @@ jobs:
           file: Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
+          no-cache: true
 
       # Step 6: Deploy to Server (optional)
       - name: Deploy using SSH
