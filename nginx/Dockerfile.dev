@@ -1,0 +1,8 @@
+# backend/Dockerfile.dev বা মূল Dockerfile যদি আপনি ডেভে এটি ব্যবহার করেন
+FROM nginx:alpine
+
+# ডেভেলপমেন্ট কনফিগারেশন কপি করা
+# এই কনফিগারেশনটি লোকাল ভলিউম মাউন্ট-এর সাথে কাজ করবে
+# COPY ./nginx/default.conf.dev /etc/nginx/conf.d/default.conf
+
+# ... অন্যান্য সেটআপ

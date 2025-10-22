@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: Docker laravel-react with CI/CD Pipeline
 
 on:
   push:
@@ -51,7 +51,27 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
           script: |
+            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Shell Variables সেট করা এবং docker compose চালানো
+            # DB Secrets সরাসরি GitHub Secrets থেকে আসছে (নিরাপদ পদ্ধতি)
+            DB_DATABASE=${{ secrets.DB_DATABASE }} \
+            DB_USERNAME=${{ secrets.DB_USERNAME }} \
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
+            sudo docker compose -f docker-compose.prod.yml up -d --build --force-recreate --remove-orphans
+            
+            # ডেটাবেস মাইগ্রেশন চালানো
+            LARAVEL_CONTAINER_NAME=$(sudo docker compose -f docker-compose.prod.yml ps -q backend) 
+            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
+              echo "Running Laravel Migrations..."
+              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force
+              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear
+            else
+              echo "Error: Backend container not found for migration."
+            fi
+            
+            echo "Deployment successful!"

@@ -1,0 +1,8 @@
+# nginx/Dockerfile
+FROM nginx:alpine
+
+# প্রোডাকশন কনফিগারেশন কপি করা
+# এই কনফিগারেশনটি অবশ্যই React build এবং API proxy সঠিকভাবে হ্যান্ডেল করবে
+COPY ./nginx/default.conf.prod /etc/nginx/conf.d/default.conf
+
+# ... SSL সার্টিফিকেট কপি করার ধাপ থাকতে পারে
