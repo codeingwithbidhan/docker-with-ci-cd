@@ -17,7 +17,8 @@ services:
       - app_network
       - db_network
     depends_on:
-      - db
+      - db:
+          condition: service_healthy
 
   nginx:
     build:
@@ -44,6 +45,12 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - db_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s   # প্রতি 10 সেকেন্ড পর চেক করবে
+      timeout: 5s     # 5 সেকেন্ডের মধ্যে উত্তর না পেলে ব্যর্থ
+      retries: 5      # 5 বার ব্যর্থ হলে 'unhealthy'
+      start_period: 30s # প্রথম 30 সেকেন্ড অপেক্ষা করবে
 
 networks:
   app_network:
