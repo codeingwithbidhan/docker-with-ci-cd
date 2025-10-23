@@ -78,30 +78,42 @@ jobs:
             sudo bash -c 'DB_DATABASE=${{ secrets.DB_DATABASE }}; DB_USERNAME=${{ secrets.DB_USERNAME }}; DB_PASSWORD=${{ secrets.DB_PASSWORD }}; DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}; export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD; docker-compose -f docker-compose.production.yml pull; docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans;'
             
             echo "Container startup command finished."
-
-      # Step 8: Run Database Migrations (এই ধাপটি অপরিবর্তিত)
+            
+      # Step 8: Run Database Migrations
       - name: Run Database Migrations
         uses: appleboy/ssh-action@v1
         with:
-            # ... (বাকি সেটিংস অপরিবর্তিত)
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          command_timeout: 5m
+          
+          # 💡 চূড়ান্ত ফিক্স: Step 8 এর সব কমান্ডকে sudo bash -c ব্লকের ভেতরে রাখা
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # LARAVEL কন্টেইনারের নাম বের করা
-            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
+            # LARAVEL কন্টেইনারের নাম বের করার জন্য একটি আলাদা ভ্যারিয়েবল সেট
+            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend)
             
-            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              echo "Running Laravel Migrations...";
-              # মাইগ্রেশন চালাতে DB Secrets সরাসরি ইনজেক্ট করা হচ্ছে
-              sudo docker exec \
-                -e DB_DATABASE=${{ secrets.DB_DATABASE }} \
-                -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
-                -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-                $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+            # সমস্ত মাইগ্রেশন এবং exec কমান্ডকে sudo bash -c এর ভেতরে রাখা
+            sudo bash -c "
+              LARAVEL_CONTAINER_NAME_CHECK=$(${LARAVEL_CONTAINER_NAME});
+
+              if [ -n \"${LARAVEL_CONTAINER_NAME}\" ]; then
+                echo 'Running Laravel Migrations...';
                 
-              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
-              echo "Deployment successful!";
-            else
-              echo "Error: Backend container not found for migration.";
-              exit 1 # মাইগ্রেশন ব্যর্থ হলে পুরো কাজ ব্যর্থ হবে
-            fi
+                # মাইগ্রেশন চালাতে DB Secrets সরাসরি ইনজেক্ট করা হচ্ছে (এখন দ্বৈত উদ্ধৃতি চিহ্নের ভেতরে নিরাপদ)
+                docker exec \
+                  -e DB_DATABASE='${{ secrets.DB_DATABASE }}' \
+                  -e DB_USERNAME='${{ secrets.DB_USERNAME }}' \
+                  -e DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
+                  ${LARAVEL_CONTAINER_NAME} php artisan migrate --force;
+                  
+                docker exec ${LARAVEL_CONTAINER_NAME} php artisan cache:clear;
+                echo 'Deployment successful!';
+              else
+                echo 'Error: Backend container not found for migration.';
+                exit 1;
+              fi
+            "
