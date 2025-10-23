@@ -66,35 +66,33 @@ jobs:
           port: ${{ secrets.AWS_PORT }}
 
           script: |
-            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
-            mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            # 💡 পরিবর্তন: DB Secrets সরাসরি এখানে এক্সপোর্ট করা হবে
+            export DB_DATABASE=${{ secrets.DB_DATABASE }}
+            export DB_USERNAME=${{ secrets.DB_USERNAME }}
+            export DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            export DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}
 
-            # Shell Variables সেট করা
-            #  পরিবর্তন: DB Secrets সরাসরি ভ্যারিয়েবলে সেট করা
-            DB_DATABASE=${{ secrets.DB_DATABASE }}
-            DB_USERNAME=${{ secrets.DB_USERNAME }}
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}
+            # পুরো স্ক্রিপ্টটিকে একটি একক, শক্তিশালী Shell কমান্ডে মোড়ানো
+            sudo bash -c '
+              # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
+              mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+              cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
 
-            # ২. ভ্যারিয়েবলগুলোকে Shell Environment এ এক্সপোর্ট করা
-            # এটি নিশ্চিত করে যে sudo docker-compose কমান্ড ভ্যালুগুলো পাবে।
-            export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD
-
-            # ৩. Docker Hub থেকে নতুন ইমেজগুলি পুল করা (ডাউনলোড করা)
-            sudo -E docker-compose -f docker-compose.production.yml pull
-            
-            # ৪. নতুন ইমেজ ব্যবহার করে কন্টেইনার আপডেট করা
-            sudo -E docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
-            
-            # ৫. ডেটাবেস মাইগ্রেশন
-            LARAVEL_CONTAINER_NAME=$(sudo -E docker-compose -f docker-compose.production.yml ps -q backend) 
-            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              echo "Running Laravel Migrations..."
-              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force
-              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear
-            else
-              echo "Error: Backend container not found for migration."
-            fi
-            
-            echo "Deployment successful!"
+              # ২. Docker Compose কমান্ডগুলো চালানো
+              # এই কমান্ডগুলো স্বয়ংক্রিয়ভাবে এক্সপোর্ট করা ভ্যারিয়েবলগুলো পাবে।
+              docker-compose -f docker-compose.production.yml pull
+              docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
+              
+              # ৩. ডেটাবেস মাইগ্রেশন
+              LARAVEL_CONTAINER_NAME=$(docker-compose -f docker-compose.production.yml ps -q backend) 
+              if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
+                echo "Running Laravel Migrations..."
+                # এখানে sudo দরকার নেই, কারণ bash -c রুট হিসেবে চলছে
+                docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force
+                docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear
+              else
+                echo "Error: Backend container not found for migration."
+              fi
+              
+              echo "Deployment successful!"
+            '
