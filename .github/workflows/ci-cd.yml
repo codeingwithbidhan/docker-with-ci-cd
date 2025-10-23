@@ -45,7 +45,19 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
 
-      # Step 6: Deploy to Server (optional)
+
+      # Step 6: File Copy (docker-compose.production.yml সার্ভারে কপি করা)
+      - name: Copy Docker Compose File to Server
+        uses: appleboy/scp-action@v0.1.7 # <--- ফাইল কপির জন্য সঠিক অ্যাকশন
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          source: "docker-compose.production.yml" 
+          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
+
+      # Step 7: Deploy to Server (optional)
       - name: Deploy using SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -53,12 +65,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-
-          # চূড়ান্ত সংশোধন: শুধুমাত্র docker-compose.prod.yml কপি করুন। 
-          # আপনার DB Secrets সরাসরি স্ক্রিপ্টে ইনজেক্ট হচ্ছে, তাই .env ফাইল দরকার নেই।
-          source: "docker-compose.production.yml" 
-          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
-
+          
           script: |
             # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
             mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
