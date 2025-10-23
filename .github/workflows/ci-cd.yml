@@ -97,7 +97,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
           # শুধুমাত্র আপ করার জন্য কম টাইমআউট (৫ মিনিট)
-          command_timeout: 20m
+          command_timeout: 15m
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
