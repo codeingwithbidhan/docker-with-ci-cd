@@ -54,8 +54,15 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
+
+          # চূড়ান্ত সংশোধন: শুধুমাত্র docker-compose.prod.yml কপি করুন। 
+          # আপনার DB Secrets সরাসরি স্ক্রিপ্টে ইনজেক্ট হচ্ছে, তাই .env ফাইল দরকার নেই।
+          source: "docker-compose.production.yml" 
+          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
+
           script: |
             # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
+            mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
 
             # Shell Variables সেট করা এবং docker compose চালানো
@@ -64,9 +71,14 @@ jobs:
             DB_USERNAME=${{ secrets.DB_USERNAME }} \
             DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
             DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
+
+            # ৩. Docker Hub থেকে নতুন ইমেজগুলি পুল করা (ডাউনলোড করা)
+            sudo docker compose -f docker-compose.prod.yml pull
+            
+            # ৪. নতুন ইমেজ ব্যবহার করে কন্টেইনার আপডেট করা
             sudo docker compose -f docker-compose.prod.yml up -d --build --force-recreate --remove-orphans
             
-            # ডেটাবেস মাইগ্রেশন চালানো
+            # ৫. ডেটাবেস মাইগ্রেশন
             LARAVEL_CONTAINER_NAME=$(sudo docker compose -f docker-compose.prod.yml ps -q backend) 
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
               echo "Running Laravel Migrations..."
