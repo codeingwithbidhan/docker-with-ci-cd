@@ -47,7 +47,7 @@ jobs:
 
       # Step 6: Deploy to Server (optional)
       - name: Deploy using SSH
-        uses: appleboy/ssh-action@v1.0.4
+        uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
