@@ -56,7 +56,39 @@ jobs:
           source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # Step 7: Deploy Containers (Start containers only)
+      # 💡 সংশোধিত Step 7: শুধুমাত্র ইমেজ পুল করা (সময়সাপেক্ষ ধাপ)
+      - name: Pull Latest Docker Images & Create ENV
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          # শুধুমাত্র পুল করার জন্য টাইমআউট বাড়ানো হলো (২০ মিনিট)
+          command_timeout: 20m 
+
+          script: |
+            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া এবং ক্লিনআপ
+            mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            
+            # ২. Secrets থেকে .env ফাইল তৈরি করা (ভ্যারিয়েবল ফিক্স)
+            echo "Creating .env file from secrets..."
+            echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" > .env
+            echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
+            
+            # ৩. ক্লিনআপ
+            sudo docker-compose -f docker-compose.production.yml down || true
+            sudo docker image prune -f || true
+            
+            # ৪. ইমেজ পুল করা (শুধুমাত্র পুল!)
+            echo "Starting Image Pull..."
+            sudo docker-compose -f docker-compose.production.yml pull
+            echo "Image Pull Complete."
+
+      # 💡 নতুন Step 7.5: কন্টেইনার স্টার্ট করা (দ্রুত ধাপ)
       - name: Start Docker Containers
         uses: appleboy/ssh-action@v1
         with:
@@ -64,22 +96,16 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          command_timeout: 15m
+          # শুধুমাত্র আপ করার জন্য কম টাইমআউট (৫ মিনিট)
+          command_timeout: 5m
 
-          # 💡 চূড়ান্ত নিরাপদ সমাধান: সমস্ত কমান্ড একটি একক লাইনে
           script: |
-            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া এবং ক্লিনআপ
-            mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            sudo docker-compose -f docker-compose.production.yml down || true
-            sudo docker image prune -f || true
-            
-            # ২. সমস্ত ভ্যারিয়েবল ও ডকার কম্পোজ কমান্ড এক লাইনে
-            sudo bash -c 'DB_DATABASE=${{ secrets.DB_DATABASE }}; DB_USERNAME=${{ secrets.DB_USERNAME }}; DB_PASSWORD=${{ secrets.DB_PASSWORD }}; DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}; export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD; docker-compose -f docker-compose.production.yml pull; docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans;'
-            
+            # ৫. কন্টেইনার আপ করা (কোনো পুলিং নেই)
+            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             echo "Container startup command finished."
-            
-      # Step 8: Run Database Migrations
+
+      # Step 8: Run Database Migrations (অপরিবর্তিত)
       - name: Run Database Migrations
         uses: appleboy/ssh-action@v1
         with:
@@ -89,31 +115,19 @@ jobs:
           port: ${{ secrets.AWS_PORT }}
           command_timeout: 5m
           
-          # 💡 চূড়ান্ত ফিক্স: Step 8 এর সব কমান্ডকে sudo bash -c ব্লকের ভেতরে রাখা
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # LARAVEL কন্টেইনারের নাম বের করার জন্য একটি আলাদা ভ্যারিয়েবল সেট
-            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend)
+            # LARAVEL কন্টেইনারের নাম বের করা
+            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
             
-            # সমস্ত মাইগ্রেশন এবং exec কমান্ডকে sudo bash -c এর ভেতরে রাখা
-            sudo bash -c "
-              LARAVEL_CONTAINER_NAME_CHECK=$(${LARAVEL_CONTAINER_NAME});
-
-              if [ -n \"${LARAVEL_CONTAINER_NAME}\" ]; then
-                echo 'Running Laravel Migrations...';
-                
-                # মাইগ্রেশন চালাতে DB Secrets সরাসরি ইনজেক্ট করা হচ্ছে (এখন দ্বৈত উদ্ধৃতি চিহ্নের ভেতরে নিরাপদ)
-                docker exec \
-                  -e DB_DATABASE='${{ secrets.DB_DATABASE }}' \
-                  -e DB_USERNAME='${{ secrets.DB_USERNAME }}' \
-                  -e DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-                  ${LARAVEL_CONTAINER_NAME} php artisan migrate --force;
-                  
-                docker exec ${LARAVEL_CONTAINER_NAME} php artisan cache:clear;
-                echo 'Deployment successful!';
-              else
-                echo 'Error: Backend container not found for migration.';
-                exit 1;
-              fi
-            "
+            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
+              echo "Running Laravel Migrations...";
+              # DB Secrets এখন .env ফাইল থেকে কন্টেইনারের মধ্যে অ্যাক্সেস করবে
+              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
+              echo "Deployment successful!";
+            else
+              echo "Error: Backend container not found for migration.";
+              exit 1;
+            fi
