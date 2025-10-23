@@ -82,13 +82,13 @@ jobs:
             export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD
 
             # ৩. Docker Hub থেকে নতুন ইমেজগুলি পুল করা (ডাউনলোড করা)
-            sudo docker-compose -f docker-compose.production.yml pull
+            sudo -E docker-compose -f docker-compose.production.yml pull
             
             # ৪. নতুন ইমেজ ব্যবহার করে কন্টেইনার আপডেট করা
-            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
+            sudo -E docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
             # ৫. ডেটাবেস মাইগ্রেশন
-            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
+            LARAVEL_CONTAINER_NAME=$(sudo -E docker-compose -f docker-compose.production.yml ps -q backend) 
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
               echo "Running Laravel Migrations..."
               sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force
