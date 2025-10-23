@@ -16,9 +16,12 @@ services:
     networks:
       - app_network
       - db_network
+    # DB HEALTHY না হওয়া পর্যন্ত অপেক্ষা করবে
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_healthy 
+      nginx: # Nginx এর উপর নির্ভর করার প্রয়োজন নেই, তবুও কনফিগারেশন সঠিক
+        condition: service_started
 
   nginx:
     build:
@@ -40,18 +43,22 @@ services:
     container_name: mysql_db_prod
     restart: always
     environment:
+      # 🚨 নতুন ভ্যারিয়েবল যোগ করা হয়েছে: Laravel এর ইউজার ও পাসওয়ার্ড
       MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME} # DB_USERNAME ব্যবহার করুন
+      MYSQL_PASSWORD: ${DB_PASSWORD} # DB_PASSWORD ব্যবহার করুন
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql
     networks:
       - db_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s   # প্রতি 10 সেকেন্ড পর চেক করবে
-      timeout: 5s     # 5 সেকেন্ডের মধ্যে উত্তর না পেলে ব্যর্থ
-      retries: 5      # 5 বার ব্যর্থ হলে 'unhealthy'
-      start_period: 30s # প্রথম 30 সেকেন্ড অপেক্ষা করবে
+      # 🚨 healthcheck এ ইউজারনেম ও পাসওয়ার্ড যোগ করা হলো
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${DB_USERNAME}", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s 
 
 networks:
   app_network:
