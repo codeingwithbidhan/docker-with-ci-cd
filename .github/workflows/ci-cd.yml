@@ -88,26 +88,29 @@ jobs:
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
-      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা (টাইমআউট এড়ানো)
-      - name: Start Docker Containers (using nohup)
+      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা
+      - name: Start Docker Containers (using simple up -d)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          command_timeout: 5m # এখন দ্রুত শেষ হবে
+          # 🚨 টাইমআউট আবার বাড়ানো হলো, যেহেতু nohup কাজ করছে না
+          command_timeout: 15m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # 🚨 চূড়ান্ত সমাধান: nohup এবং & ব্যবহার করে Shell সেশন থেকে বিচ্ছিন্ন করা
-            echo "Launching containers in background with nohup..."
-            sudo nohup docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > /dev/null 2>&1 &
+            echo "Starting containers with up -d..."
+            # 🚨 nohup সরিয়ে দিয়ে আবার সাধারণ up -d ব্যবহার, তবে এবার বেশি টাইমআউট দিয়ে
+            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
-            echo "Container startup command launched. Continuing to next step..."
-            # ১ সেকেন্ড অপেক্ষা করা যাতে কমান্ডটি নিশ্চিতভাবে শুরু হয়
-            sleep 1
+            # 🚨 ডিবাগিং: কন্টেইনার সফলভাবে শুরু হয়েছে কি না, তা যাচাই করা
+            echo "--- Checking Container Status Immediately ---"
+            sudo docker-compose -f docker-compose.production.yml ps
+            
+            echo "Container startup command finished."
 
       # Step 8: Run Database Migrations (সংশোধিত ডিবাগিং)
       - name: Run Database Migrations and Debug Logs
