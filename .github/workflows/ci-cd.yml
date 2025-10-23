@@ -71,34 +71,28 @@ jobs:
             mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
 
-            # ২. সমস্ত এনভায়রনমেন্ট ভ্যারিয়েবল এক লাইনে অ্যাসাইন করে docker-compose চালানো
-            # এটিই ভ্যারিয়েবল পাস করার সবচেয়ে নির্ভরযোগ্য পদ্ধতি
-            
-            sudo DB_DATABASE=${{ secrets.DB_DATABASE }} \
-            DB_USERNAME=${{ secrets.DB_USERNAME }} \
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
-            docker-compose -f docker-compose.production.yml pull
-
-            sudo DB_DATABASE=${{ secrets.DB_DATABASE }} \
-            DB_USERNAME=${{ secrets.DB_USERNAME }} \
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
-            docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
-            
-            # ৩. ডেটাবেস মাইগ্রেশন
-            # এখানে ভ্যারিয়েবলগুলো সরাসরি docker exec এর মাধ্যমে কন্টেইনারের ভিতরে ইনজেক্ট করা হবে
-            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
-            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              echo "Running Laravel Migrations..."
-              sudo docker exec \
-                -e DB_DATABASE=${{ secrets.DB_DATABASE }} \
-                -e DB_USERNAME=${{ secrets.DB_USERNAME }} \
-                -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-                $LARAVEL_CONTAINER_NAME php artisan migrate --force
-              sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear
-            else
-              echo "Error: Backend container not found for migration."
-            fi
-            
-            echo "Deployment successful!"      
+            # 💡 চূড়ান্ত সংশোধন: ভ্যারিয়েবলগুলো কমাণ্ড সেপারেটর (;) ব্যবহার করে এক লাইনে রাখা
+            sudo bash -c '
+              DB_DATABASE=${{ secrets.DB_DATABASE }}; \
+              DB_USERNAME=${{ secrets.DB_USERNAME }}; \
+              DB_PASSWORD=${{ secrets.DB_PASSWORD }}; \
+              DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}; \
+              
+              export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD;
+              
+              # ২. Docker Compose pull এবং up
+              docker-compose -f docker-compose.production.yml pull;
+              docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans;
+              
+              # ৩. ডেটাবেস মাইগ্রেশন
+              LARAVEL_CONTAINER_NAME=$(docker-compose -f docker-compose.production.yml ps -q backend); 
+              if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
+                echo "Running Laravel Migrations...";
+                docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+                docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
+              else
+                echo "Error: Backend container not found for migration.";
+              fi;
+              
+              echo "Deployment successful!";
+            ' 
