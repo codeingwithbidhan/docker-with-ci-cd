@@ -88,24 +88,28 @@ jobs:
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
-      # 💡 নতুন Step 7.5: কন্টেইনার স্টার্ট করা (দ্রুত ধাপ)
-      - name: Start Docker Containers
+      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা (টাইমআউট এড়ানো)
+      - name: Start Docker Containers (using nohup)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # শুধুমাত্র আপ করার জন্য কম টাইমআউট (৫ মিনিট)
-          command_timeout: 15m
+          command_timeout: 5m # এখন দ্রুত শেষ হবে
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            # ৫. কন্টেইনার আপ করা (কোনো পুলিং নেই)
-            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
-            echo "Container startup command finished."
+            
+            # 🚨 চূড়ান্ত সমাধান: nohup এবং & ব্যবহার করে Shell সেশন থেকে বিচ্ছিন্ন করা
+            echo "Launching containers in background with nohup..."
+            sudo nohup docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > /dev/null 2>&1 &
+            
+            echo "Container startup command launched. Continuing to next step..."
+            # ১ সেকেন্ড অপেক্ষা করা যাতে কমান্ডটি নিশ্চিতভাবে শুরু হয়
+            sleep 1
 
-      # Step 8: Run Database Migrations (অপরিবর্তিত)
+      # Step 8: Run Database Migrations
       - name: Run Database Migrations
         uses: appleboy/ssh-action@v1
         with:
@@ -118,6 +122,10 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
+            # 💡 কন্টেইনার সম্পূর্ণরূপে চালু হওয়ার জন্য অপেক্ষা
+            echo "Waiting 30 seconds for containers to become fully ready..."
+            sleep 30 
+            
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
             
@@ -128,6 +136,8 @@ jobs:
               sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
               echo "Deployment successful!";
             else
-              echo "Error: Backend container not found for migration.";
+              echo "Error: Backend container not found for migration. Checking logs...";
+              # ব্যর্থ হলে ডকার লগ প্রিন্ট করা
+              sudo docker-compose -f docker-compose.production.yml logs 
               exit 1;
             fi
