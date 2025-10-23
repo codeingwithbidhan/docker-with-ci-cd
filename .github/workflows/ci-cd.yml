@@ -44,11 +44,10 @@ jobs:
           file: ./frontend/Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
-          no-cache: true
 
       # Step 6: Deploy to Server (optional)
       - name: Deploy using SSH
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.0.1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
@@ -73,13 +72,13 @@ jobs:
             DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
 
             # ৩. Docker Hub থেকে নতুন ইমেজগুলি পুল করা (ডাউনলোড করা)
-            sudo docker compose -f docker-compose.production.yml pull
+            sudo docker-compose -f docker-compose.production.yml pull
             
             # ৪. নতুন ইমেজ ব্যবহার করে কন্টেইনার আপডেট করা
-            sudo docker compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
+            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
             # ৫. ডেটাবেস মাইগ্রেশন
-            LARAVEL_CONTAINER_NAME=$(sudo docker compose -f docker-compose.production.yml ps -q backend) 
+            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
               echo "Running Laravel Migrations..."
               sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force
