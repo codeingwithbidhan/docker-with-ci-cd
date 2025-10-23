@@ -34,7 +34,6 @@ jobs:
           file: ./backend/Dockerfile.production
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/laravel-backend:latest
-          no-cache: true
 
       # Step 5: Build and Push React Frontend
       - name: Build & Push React Frontend
@@ -65,18 +64,22 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          
+
           script: |
             # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
             mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
 
-            # Shell Variables সেট করা এবং docker compose চালানো
-            # DB Secrets সরাসরি GitHub Secrets থেকে আসছে (নিরাপদ পদ্ধতি)
-            DB_DATABASE=${{ secrets.DB_DATABASE }} \
-            DB_USERNAME=${{ secrets.DB_USERNAME }} \
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
-            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }} \
+            # Shell Variables সেট করা
+            #  পরিবর্তন: DB Secrets সরাসরি ভ্যারিয়েবলে সেট করা
+            DB_DATABASE=${{ secrets.DB_DATABASE }}
+            DB_USERNAME=${{ secrets.DB_USERNAME }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}
+
+            # ২. ভ্যারিয়েবলগুলোকে Shell Environment এ এক্সপোর্ট করা
+            # এটি নিশ্চিত করে যে sudo docker-compose কমান্ড ভ্যালুগুলো পাবে।
+            export DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD
 
             # ৩. Docker Hub থেকে নতুন ইমেজগুলি পুল করা (ডাউনলোড করা)
             sudo docker-compose -f docker-compose.production.yml pull
