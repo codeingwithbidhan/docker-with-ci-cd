@@ -132,86 +132,66 @@ jobs:
             echo "Syntax check passed successfully. Ready to launch containers."
 
 
-      # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - **SIMPLIFIED NOHUP & LOGGING**
-      - name: Start Docker Containers (Non-Blocking)
+      # 🚀 FINAL DEPLOYMENT STEP: Combine Start, Wait, and Migrate (Blocking with Long Timeout)
+      # nohup-এর জটিলতা এড়িয়ে একটি একক, নির্ভরযোগ্য, ব্লক করা কমান্ড ব্যবহার করা হলো।
+      - name: Start Containers, Wait, and Migrate
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 টাইমআউট 1 মিনিট, কারণ কমান্ডটি অবিলম্বে ব্যাকগ্রাউন্ডে চলে যাবে
-          command_timeout: 1m 
+          # 🚨 দীর্ঘ টাইমআউট (10 মিনিট) সেট করা হলো, যেহেতু এটি একটি ব্লকিং অপারেশন।
+          command_timeout: 10m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # 🚨 CRITICAL LOGGING FIX: Writing a start marker to the log file first
-            echo "--- STARTUP ATTEMPTING (NON-BLOCKING) ---" > docker_startup.log
-            echo "Working Directory: $(pwd)" >> docker_startup.log 2>&1
+            echo "--- Starting Containers (Blocking) ---"
+            # কন্টেইনার স্টার্ট করা হলো
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans || {
+                echo "FATAL ERROR: docker-compose up failed immediately."
+                sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs
+                exit 1
+            }
             
-            echo "Starting containers using nohup for non-blocking execution with explicit path and sudo..." >> docker_startup.log 2>&1
+            echo "Containers started. Waiting for backend health check..."
             
-            # 🚨 FINAL FIX: Simplified nohup command. The full command executes directly using nohup to background sudo.
-            # This avoids the extra layer of 'bash -c' which might be causing context loss.
-            nohup sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans >> docker_startup.log 2>&1 &
-            
-            echo "Non-blocking startup initiated. The next step will wait for containers."
+            MAX_WAIT=120
+            COUNTER=0
+            LARAVEL_CONTAINER_NAME=""
 
-      # Step 8: অপেক্ষা, মাইগ্রেশন এবং Debug Logs (5m Timeout) - **ADDED SUDO**
-      - name: Wait 90s, Run Migrations and Debug Logs
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.AWS_PORT }}
-          command_timeout: 5m
-          
-          script: |
-            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            
-            # 🚨 গ্যারান্টিযুক্ত অপেক্ষা: কন্টেইনার স্টার্ট হওয়ার জন্য 90 সেকেন্ড অপেক্ষা করা হলো।
-            echo "Waiting 90 seconds for all containers to fully start and stabilize..."
-            sleep 90
-            
-            # LARAVEL কন্টেইনারের নাম বের করা (Use sudo)
-            LARAVEL_CONTAINER_NAME=$(sudo /usr/local/bin/docker-compose -f docker-compose.production.yml ps -q backend) 
-            
-            if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              # inspect now needs sudo
-              CONTAINER_STATUS=$(sudo /usr/bin/docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
+            # 🚨 কাস্টম হেলথ চেক লুপ: কন্টেইনার চালু হওয়া পর্যন্ত 120 সেকেন্ড অপেক্ষা করবে
+            while [ $COUNTER -lt $MAX_WAIT ]; do
+                LARAVEL_CONTAINER_NAME=$(sudo /usr/local/bin/docker-compose -f docker-compose.production.yml ps -q backend) 
+                
+                if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
+                    CONTAINER_STATUS=$(sudo /usr/bin/docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
+                    
+                    if [ "$CONTAINER_STATUS" = "running" ]; then
+                        echo "Backend container is RUNNING after $COUNTER seconds."
+                        break
+                    fi
+                fi
+                
+                echo "Waiting for backend container to run ($((MAX_WAIT - COUNTER))s remaining)..."
+                sleep 5
+                COUNTER=$((COUNTER + 5))
+            done
 
-              if [ "$CONTAINER_STATUS" = "running" ]; then
-                  echo "Backend container is RUNNING. Running Migrations...";
-                  echo "Waiting 10 seconds for DB connection establishment...";
-                  sleep 10
+            # কন্টেইনার চেক
+            if [ "$CONTAINER_STATUS" = "running" ]; then
+                echo "Waiting 10 seconds for DB connection establishment before migrations...";
+                sleep 10
                   
-                  # 🚨 FIX: docker exec needs sudo
-                  sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
-                  sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
-                  echo "Deployment successful!";
-              else
-                  echo "Error: Backend container found but status is NOT RUNNING ($CONTAINER_STATUS).";
-                  
-                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা (Use sudo)
-                  echo "--- Printing Backend Container Logs ---"
-                  sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs backend
-                  
-                  # 🚨 ডিবাগিং: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
-                  echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
-                  cat docker_startup.log || echo "Startup log file not found."
-                  
-                  exit 1;
-              fi
+                # মাইগ্রেশন ও ক্যাশে ক্লিয়ার করা হলো
+                echo "Running Migrations..."
+                sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+                sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
+                echo "Deployment successful!";
             else
-              echo "Error: Backend container not found. Containers failed to start.";
-              
-              # 🚨 চূড়ান্ত ডিবাগ: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
-              echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
-              cat docker_startup.log || echo "Startup log file not found."
-              
-              # Final logs need sudo
-              sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs 
-              exit 1;
+                echo "Error: Backend container failed to run within $MAX_WAIT seconds."
+                echo "--- Printing Full Docker Compose Logs for Diagnosis ---"
+                sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs 
+                exit 1;
             fi
