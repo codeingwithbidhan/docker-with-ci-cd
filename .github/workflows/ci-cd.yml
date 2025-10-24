@@ -51,7 +51,7 @@ jobs:
           source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (Unchanged)
+      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (Pull now needs sudo)
       - name: Pull Latest Docker Images & Create ENV
         uses: appleboy/ssh-action@v1
         with:
@@ -78,11 +78,12 @@ jobs:
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
             
-            docker-compose -f docker-compose.production.yml down || true
-            docker image prune -f || true
+            # Use sudo for docker-compose down/prune/pull
+            sudo docker-compose -f docker-compose.production.yml down || true
+            sudo docker image prune -f || true
             
             echo "Starting Image Pull..."
-            docker-compose -f docker-compose.production.yml pull
+            sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
       # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা (Unchanged)
@@ -100,7 +101,7 @@ jobs:
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
 
-      # 💡 ডায়াগনস্টিক: সার্ভারের স্বাস্থ্য পরীক্ষা ও পাথ যাচাই (নতুন শক্তিশালী ধাপ)
+      # 💡 ডায়াগনস্টিক: সার্ভারের স্বাস্থ্য পরীক্ষা ও পাথ যাচাই (Path & Syntax now needs sudo for config)
       - name: Deployment Health Check (Path & Syntax)
         uses: appleboy/ssh-action@v1
         with:
@@ -123,15 +124,15 @@ jobs:
             fi
             
             echo "--- Validating Docker Compose Syntax (using explicit path) ---"
-            # Validate YAML syntax and configuration, force exit on failure
-            /usr/local/bin/docker-compose -f docker-compose.production.yml config || {
+            # Validate YAML syntax and configuration, force exit on failure (Use sudo here too)
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml config || {
                 echo "FATAL ERROR: docker-compose config failed. Check YAML output for errors."
                 exit 1
             }
             echo "Syntax check passed successfully. Ready to launch containers."
 
 
-      # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - SSH হ্যাং এড়াতে nohup-এ প্রত্যাবর্তন
+      # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - **ADDED SUDO**
       - name: Start Docker Containers (Non-Blocking)
         uses: appleboy/ssh-action@v1
         with:
@@ -145,13 +146,13 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers using nohup for non-blocking execution with explicit path..."
-            # 🚨 FIX: docker-compose এর পুরো পাথ ব্যবহার করা হলো।
-            nohup bash -c 'cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd && /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans' > docker_startup.log 2>&1 &
+            echo "Starting containers using nohup for non-blocking execution with explicit path and sudo..."
+            # 🚨 FINAL FIX: SUDO যুক্ত করা হলো। এটি পারমিশন ত্রুটি এড়াবে।
+            nohup bash -c 'cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd && sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans' > docker_startup.log 2>&1 &
             
             echo "Non-blocking startup initiated. The next step will wait for containers."
 
-      # Step 8: অপেক্ষা, মাইগ্রেশন এবং Debug Logs (5m Timeout)
+      # Step 8: অপেক্ষা, মাইগ্রেশন এবং Debug Logs (5m Timeout) - **ADDED SUDO**
       - name: Wait 90s, Run Migrations and Debug Logs
         uses: appleboy/ssh-action@v1
         with:
@@ -168,27 +169,28 @@ jobs:
             echo "Waiting 90 seconds for all containers to fully start and stabilize..."
             sleep 90
             
-            # LARAVEL কন্টেইনারের নাম বের করা
-            LARAVEL_CONTAINER_NAME=$(/usr/local/bin/docker-compose -f docker-compose.production.yml ps -q backend) 
+            # LARAVEL কন্টেইনারের নাম বের করা (Use sudo)
+            LARAVEL_CONTAINER_NAME=$(sudo /usr/local/bin/docker-compose -f docker-compose.production.yml ps -q backend) 
             
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              CONTAINER_STATUS=$(/usr/bin/docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
+              # inspect now needs sudo
+              CONTAINER_STATUS=$(sudo /usr/bin/docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
 
               if [ "$CONTAINER_STATUS" = "running" ]; then
                   echo "Backend container is RUNNING. Running Migrations...";
                   echo "Waiting 10 seconds for DB connection establishment...";
                   sleep 10
                   
-                  # 🚨 FIX: docker-compose এর পুরো পাথ ব্যবহার করা হলো।
-                  /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
-                  /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
+                  # 🚨 FIX: docker exec needs sudo
+                  sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+                  sudo /usr/bin/docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
                   echo "Deployment successful!";
               else
                   echo "Error: Backend container found but status is NOT RUNNING ($CONTAINER_STATUS).";
                   
-                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা
+                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা (Use sudo)
                   echo "--- Printing Backend Container Logs ---"
-                  /usr/local/bin/docker-compose -f docker-compose.production.yml logs backend
+                  sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs backend
                   
                   # 🚨 ডিবাগিং: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
                   echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
@@ -203,6 +205,7 @@ jobs:
               echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
               cat docker_startup.log || echo "Startup log file not found."
               
-              /usr/local/bin/docker-compose -f docker-compose.production.yml logs 
+              # Final logs need sudo
+              sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs 
               exit 1;
             fi
