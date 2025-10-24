@@ -1,10 +1,154 @@
-[Immersive content redacted for brevity.]
+name: Docker laravel-react with CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1-6: (Unchanged)
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build & Push Laravel Backend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.production
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/laravel-backend:latest
+
+      - name: Build & Push React Frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.production
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
+
+
+      - name: Copy Docker Compose File to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          source: "docker-compose.production.yml" 
+          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
+
+      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (Pull now needs sudo)
+      - name: Pull Latest Docker Images & Create ENV
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          command_timeout: 20m 
+
+          script: |
+            TARGET_DIR=/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            mkdir -p $TARGET_DIR
+            cd $TARGET_DIR
+            
+            if [ ! -f "docker-compose.production.yml" ]; then
+                echo "Error: docker-compose.production.yml file NOT FOUND in $TARGET_DIR";
+                ls -la 
+                exit 1;
+            fi
+            
+            echo "Creating .env file from secrets..."
+            echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" > .env
+            echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
+            echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
+            
+            # Use sudo for docker-compose down/prune/pull
+            sudo docker-compose -f docker-compose.production.yml down || true
+            sudo docker image prune -f || true
+            
+            echo "Starting Image Pull..."
+            sudo docker-compose -f docker-compose.production.yml pull
+            echo "Image Pull Complete."
+
+      # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা (Unchanged)
+      - name: Verify Docker Compose Content on Server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          
+          script: |
+            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            echo "--- VERIFYING CURRENT docker-compose.production.yml CONTENT ---"
+            cat docker-compose.production.yml
+            echo "---------------------------------------------------------------"
+
+      # 💡 ডায়াগনস্টিক: সার্ভারের স্বাস্থ্য পরীক্ষা ও পাথ যাচাই (Path & Syntax now needs sudo for config)
+      - name: Deployment Health Check (Path & Syntax)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+
+          script: |
+            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            
+            echo "--- Checking Docker Compose Path and Installation ---"
+            
+            # Check if the explicit path exists
+            if [ -f /usr/local/bin/docker-compose ]; then
+                echo "SUCCESS: Explicit path /usr/local/bin/docker-compose exists."
+            else
+                echo "FATAL ERROR: /usr/local/bin/docker-compose not found. Docker Compose might be missing or installed elsewhere."
+                exit 1
+            fi
+            
+            echo "--- Validating Docker Compose Syntax (using explicit path) ---"
+            # Validate YAML syntax and configuration, force exit on failure (Use sudo here too)
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml config || {
+                echo "FATAL ERROR: docker-compose config failed. Check YAML output for errors."
+                exit 1
+            }
+            echo "Syntax check passed successfully. Ready to launch containers."
+
+
+      # 🚀 FINAL DEPLOYMENT STEP: Combine Start, Wait, and Migrate (Blocking with Long Timeout)
+      - name: Start Containers, Wait, and Migrate
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          request_pty: true 
+          command_timeout: 10m 
+
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
             echo "--- Starting Containers (Blocking) ---"
-            # TTY enabled. Simple 'up -d' is used to avoid non-detaching issues.
-            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d || {
+            # 🚨 FIX: --no-build ensures Docker Compose uses the pulled images and avoids the 'Building 0.0s' deadlock.
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --no-build || {
                 echo "FATAL ERROR: docker-compose up failed immediately."
                 sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs
                 exit 1
