@@ -94,6 +94,21 @@ jobs:
             echo "Starting Image Pull..."
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
+            
+      # 🔍 নতুন ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা
+      - name: Verify Docker Compose Content on Server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.AWS_PORT }}
+          
+          script: |
+            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            echo "--- VERIFYING CURRENT docker-compose.production.yml CONTENT ---"
+            cat docker-compose.production.yml
+            echo "---------------------------------------------------------------"
 
       # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা এবং তাৎক্ষণিক এরর লগ করা
       - name: Start Docker Containers and Log Errors
