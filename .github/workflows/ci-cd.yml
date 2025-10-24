@@ -12,7 +12,7 @@ jobs:
 
     steps:
       # Step 1-6: (Unchanged)
-      - name: Checkout codeQ
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Docker Buildx
@@ -133,9 +133,9 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # 🚨 গ্যারান্টিযুক্ত অপেক্ষা: কন্টেইনার স্টার্ট হওয়ার জন্য 60 সেকেন্ড অপেক্ষা
-            echo "Waiting 60 seconds for all containers to fully start and stabilize after non-blocking launch..."
-            sleep 60
+            # 🚨 গ্যারান্টিযুক্ত অপেক্ষা: কন্টেইনার স্টার্ট হওয়ার জন্য 90 সেকেন্ড অপেক্ষা বাড়ানো হলো।
+            echo "Waiting 90 seconds for all containers to fully start and stabilize after non-blocking launch..."
+            sleep 90
             
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(docker-compose -f docker-compose.production.yml ps -q backend) 
@@ -170,6 +170,7 @@ jobs:
               fi
             else
               echo "Error: Backend container not found. Checking logs...";
+              # এই অংশটি এবার আরও বেশি ডিবাগ তথ্য দেবে।
               docker-compose -f docker-compose.production.yml logs 
               docker-compose -f docker-compose.production.yml ps
               exit 1;
