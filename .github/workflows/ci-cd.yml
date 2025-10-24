@@ -47,7 +47,7 @@ jobs:
 
       # Step 6: File Copy (docker-compose.production.yml সার্ভারে কপি করা)
       - name: Copy Docker Compose File to Server
-        uses: appleboy/scp-action@v0.1.7 # <--- ফাইল কপির জন্য সঠিক অ্যাকশন
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
@@ -56,7 +56,7 @@ jobs:
           source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # 💡 সংশোধিত Step 7: শুধুমাত্র ইমেজ পুল করা (সময়সাপেক্ষ ধাপ)
+      # 💡 সংশোধিত Step 7: ফাইল চেক ও ইমেজ পুল করা
       - name: Pull Latest Docker Images & Create ENV
         uses: appleboy/ssh-action@v1
         with:
@@ -68,42 +68,48 @@ jobs:
           command_timeout: 20m 
 
           script: |
-            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া এবং ক্লিনআপ
-            mkdir -p /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
+            TARGET_DIR=/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            mkdir -p $TARGET_DIR
+            cd $TARGET_DIR
             
-            # ২. Secrets থেকে .env ফাইল তৈরি করা (ভ্যারিয়েবল ফিক্স)
+            # 🚨 নতুন ডিবাগিং: ফাইলটি আছে কি না, তা পরীক্ষা করা
+            if [ ! -f "docker-compose.production.yml" ]; then
+                echo "Error: docker-compose.production.yml file NOT FOUND in $TARGET_DIR";
+                ls -la 
+                exit 1;
+            fi
+            
+            # ২. Secrets থেকে .env ফাইল তৈরি করা
             echo "Creating .env file from secrets..."
             echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" > .env
             echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
             
-            # ৩. ক্লিনআপ
+            # ৩. ক্লিনআপ ও পুল (অপরিবর্তিত)
             sudo docker-compose -f docker-compose.production.yml down || true
             sudo docker image prune -f || true
             
-            # ৪. ইমেজ পুল করা (শুধুমাত্র পুল!)
             echo "Starting Image Pull..."
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
       # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা
-      - name: Start Docker Containers (using simple up -d)
+      - name: Start Docker Containers
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 টাইমআউট আবার বাড়ানো হলো, যেহেতু nohup কাজ করছে না
+          # 🚨 টাইমআউট ১৫ মিনিট (সম্ভাব্য ব্লক এড়াতে)
           command_timeout: 15m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
             echo "Starting containers with up -d..."
-            # 🚨 nohup সরিয়ে দিয়ে আবার সাধারণ up -d ব্যবহার, তবে এবার বেশি টাইমআউট দিয়ে
             sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
             # 🚨 ডিবাগিং: কন্টেইনার সফলভাবে শুরু হয়েছে কি না, তা যাচাই করা
@@ -143,7 +149,7 @@ jobs:
               else
                   echo "Error: Backend container found but status is NOT RUNNING ($CONTAINER_STATUS).";
                   
-                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা
+                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা
                   echo "--- Printing Backend Container Logs ---"
                   sudo docker-compose -f docker-compose.production.yml logs backend
                   
