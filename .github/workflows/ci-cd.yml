@@ -101,20 +101,20 @@ jobs:
             echo "---------------------------------------------------------------"
 
       # 💡 চূড়ান্ত ফিক্স (Step 7.5): কন্টেইনার স্টার্ট এবং মাইগ্রেশন (Single Blocking Step)
-      - name: Deploy and Run Migrations (15 Min Timeout)
+      - name: Deploy and Run Migrations (20 Min Timeout)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 চূড়ান্ত টাইমআউট: 15 মিনিট, সম্পূর্ণ স্টার্টআপ এবং মাইগ্রেশনের জন্য।
-          command_timeout: 15m 
+          # 🚨 চূড়ান্ত টাইমআউট: 20 মিনিট, সম্পূর্ণ স্টার্টআপ এবং মাইগ্রেশনের জন্য। (15m থেকে 20m এ বাড়ানো হলো)
+          command_timeout: 20m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers (Blocking wait for DB) - up to 15 minutes..."
+            echo "Starting containers (Blocking wait for DB) - up to 20 minutes..."
             # এই কমান্ডটি depends_on: service_started শর্ত পূরণ না হওয়া পর্যন্ত ব্লক থাকবে।
             docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
