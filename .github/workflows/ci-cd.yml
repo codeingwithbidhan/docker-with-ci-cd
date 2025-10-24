@@ -51,7 +51,7 @@ jobs:
           source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (Unchanged)
+      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (SUDO removed)
       - name: Pull Latest Docker Images & Create ENV
         uses: appleboy/ssh-action@v1
         with:
@@ -115,7 +115,7 @@ jobs:
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
             echo "Starting containers using nohup for non-blocking execution..."
-            # 🚨 FIX: nohup ব্যবহার করে ব্যাকগ্রাউন্ডে কমান্ড চালানো হলো।
+            # 🚨 FIX: nohup ব্যবহার করে ব্যাকগ্রাউন্ডে কমান্ড চালানো হলো এবং আউটপুট লগ ফাইলে রিডাইরেক্ট করা হলো।
             nohup docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > docker_startup.log 2>&1 &
             
             echo "Non-blocking startup initiated. The next step will wait for containers."
@@ -162,7 +162,7 @@ jobs:
                   echo "--- Container Status Check ---"
                   docker-compose -f docker-compose.production.yml ps
                   
-                  # 🚨 নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
+                  # 🚨 চূড়ান্ত ডিবাগ: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
                   echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
                   cat docker_startup.log || echo "Startup log file not found."
 
@@ -170,7 +170,11 @@ jobs:
               fi
             else
               echo "Error: Backend container not found. Checking logs...";
-              # এই অংশটি এবার আরও বেশি ডিবাগ তথ্য দেবে।
+              
+              # 🚨 চূড়ান্ত ডিবাগ: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা (যখন কোনো কন্টেইনারই তৈরি হয়নি)
+              echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
+              cat docker_startup.log || echo "Startup log file not found."
+              
               docker-compose -f docker-compose.production.yml logs 
               docker-compose -f docker-compose.production.yml ps
               exit 1;
