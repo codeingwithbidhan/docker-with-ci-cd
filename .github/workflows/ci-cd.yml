@@ -132,7 +132,7 @@ jobs:
             echo "Syntax check passed successfully. Ready to launch containers."
 
 
-      # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - **ADDED SUDO**
+      # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - **SIMPLIFIED NOHUP & LOGGING**
       - name: Start Docker Containers (Non-Blocking)
         uses: appleboy/ssh-action@v1
         with:
@@ -146,9 +146,15 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers using nohup for non-blocking execution with explicit path and sudo..."
-            # 🚨 FINAL FIX: SUDO যুক্ত করা হলো। এটি পারমিশন ত্রুটি এড়াবে।
-            nohup bash -c 'cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd && sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans' > docker_startup.log 2>&1 &
+            # 🚨 CRITICAL LOGGING FIX: Writing a start marker to the log file first
+            echo "--- STARTUP ATTEMPTING (NON-BLOCKING) ---" > docker_startup.log
+            echo "Working Directory: $(pwd)" >> docker_startup.log 2>&1
+            
+            echo "Starting containers using nohup for non-blocking execution with explicit path and sudo..." >> docker_startup.log 2>&1
+            
+            # 🚨 FINAL FIX: Simplified nohup command. The full command executes directly using nohup to background sudo.
+            # This avoids the extra layer of 'bash -c' which might be causing context loss.
+            nohup sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans >> docker_startup.log 2>&1 &
             
             echo "Non-blocking startup initiated. The next step will wait for containers."
 
