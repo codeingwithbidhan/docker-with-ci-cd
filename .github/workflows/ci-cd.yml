@@ -114,9 +114,9 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers using nohup for non-blocking execution..."
-            # 🚨 FIX: nohup ব্যবহার করে ব্যাকগ্রাউন্ডে কমান্ড চালানো হলো এবং আউটপুট লগ ফাইলে রিডাইরেক্ট করা হলো।
-            nohup docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > docker_startup.log 2>&1 &
+            echo "Starting containers using nohup for non-blocking execution with explicit bash shell..."
+            # 🚨 চূড়ান্ত FIX: PATH/এনভায়রনমেন্ট সমস্যা এড়াতে পুরো কমান্ডটি bash -c দিয়ে চালানো হলো।
+            nohup bash -c 'cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd && docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans' > docker_startup.log 2>&1 &
             
             echo "Non-blocking startup initiated. The next step will wait for containers."
 
