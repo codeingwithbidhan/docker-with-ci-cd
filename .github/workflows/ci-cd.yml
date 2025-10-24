@@ -149,7 +149,8 @@ jobs:
             
             echo "--- Starting Containers (Blocking) ---"
             # কন্টেইনার স্টার্ট করা হলো
-            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans || {
+            # 🚨 TTY/SUDO FIX: < /dev/null যোগ করা হলো যাতে sudo পাসওয়ার্ডের জন্য অপেক্ষা না করে
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans < /dev/null || {
                 echo "FATAL ERROR: docker-compose up failed immediately."
                 sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs
                 exit 1
