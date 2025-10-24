@@ -19,9 +19,7 @@ services:
     # DB HEALTHY না হওয়া পর্যন্ত অপেক্ষা করবে
     depends_on:
       db:
-        condition: service_healthy 
-      nginx: # Nginx এর উপর নির্ভর করার প্রয়োজন নেই, তবুও কনফিগারেশন সঠিক
-        condition: service_started
+        condition: service_healthy
 
   nginx:
     build:
