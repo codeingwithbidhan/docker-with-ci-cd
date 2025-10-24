@@ -141,6 +141,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
+          # 🚨 TTY Fix: Allocate a pseudo-terminal to avoid non-interactive shell issues and immediate timeouts.
+          tty: true 
           # 🚨 দীর্ঘ টাইমআউট (10 মিনিট) সেট করা হলো, যেহেতু এটি একটি ব্লকিং অপারেশন।
           command_timeout: 10m 
 
@@ -149,8 +151,8 @@ jobs:
             
             echo "--- Starting Containers (Blocking) ---"
             # কন্টেইনার স্টার্ট করা হলো
-            # 🚨 TTY/SUDO FIX: < /dev/null যোগ করা হলো যাতে sudo পাসওয়ার্ডের জন্য অপেক্ষা না করে
-            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans < /dev/null || {
+            # TTY enabled, so removed < /dev/null
+            sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans || {
                 echo "FATAL ERROR: docker-compose up failed immediately."
                 sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs
                 exit 1
