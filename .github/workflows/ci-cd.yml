@@ -100,8 +100,8 @@ jobs:
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
 
-      # 💡 নতুন ডায়াগনস্টিক: কম্পোজ সিনট্যাক্স যাচাই করা
-      - name: Validate Docker Compose Syntax
+      # 💡 ডায়াগনস্টিক: সার্ভারের স্বাস্থ্য পরীক্ষা ও পাথ যাচাই (নতুন শক্তিশালী ধাপ)
+      - name: Deployment Health Check (Path & Syntax)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -111,9 +111,25 @@ jobs:
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
-            echo "--- Running docker-compose config to validate YAML syntax ---"
-            # 🚨 FIX: যদি কোনো সিনট্যাক্স ত্রুটি থাকে, তবে এটি এখানেই দেখাবে।
-            /usr/local/bin/docker-compose -f docker-compose.production.yml config
+            
+            echo "--- Checking Docker Compose Path and Installation ---"
+            
+            # Check if the explicit path exists
+            if [ -f /usr/local/bin/docker-compose ]; then
+                echo "SUCCESS: Explicit path /usr/local/bin/docker-compose exists."
+            else
+                echo "FATAL ERROR: /usr/local/bin/docker-compose not found. Docker Compose might be missing or installed elsewhere."
+                exit 1
+            fi
+            
+            echo "--- Validating Docker Compose Syntax (using explicit path) ---"
+            # Validate YAML syntax and configuration, force exit on failure
+            /usr/local/bin/docker-compose -f docker-compose.production.yml config || {
+                echo "FATAL ERROR: docker-compose config failed. Check YAML output for errors."
+                exit 1
+            }
+            echo "Syntax check passed successfully. Ready to launch containers."
+
 
       # 💡 সংশোধিত Step 7.5: কন্টেইনার স্টার্ট (Non-Blocking) - SSH হ্যাং এড়াতে nohup-এ প্রত্যাবর্তন
       - name: Start Docker Containers (Non-Blocking)
