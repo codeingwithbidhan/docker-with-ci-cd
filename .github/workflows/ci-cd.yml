@@ -64,30 +64,25 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # শুধুমাত্র পুল করার জন্য টাইমআউট বাড়ানো হলো (২০ মিনিট)
           command_timeout: 20m 
 
           script: |
-            # ১. প্রজেক্ট ডিরেক্টরিতে যাওয়া
             TARGET_DIR=/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             mkdir -p $TARGET_DIR
             cd $TARGET_DIR
             
-            # 🚨 নতুন ডিবাগিং: ফাইলটি আছে কি না, তা পরীক্ষা করা
             if [ ! -f "docker-compose.production.yml" ]; then
                 echo "Error: docker-compose.production.yml file NOT FOUND in $TARGET_DIR";
                 ls -la 
                 exit 1;
             fi
             
-            # ২. Secrets থেকে .env ফাইল তৈরি করা
             echo "Creating .env file from secrets..."
             echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" > .env
             echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
             
-            # ৩. ক্লিনআপ ও পুল (অপরিবর্তিত)
             sudo docker-compose -f docker-compose.production.yml down || true
             sudo docker image prune -f || true
             
@@ -95,7 +90,7 @@ jobs:
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
-      # 🔍 নতুন ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা
+      # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা
       - name: Verify Docker Compose Content on Server
         uses: appleboy/ssh-action@v1
         with:
@@ -109,7 +104,8 @@ jobs:
             echo "--- VERIFYING CURRENT docker-compose.production.yml CONTENT ---"
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
-      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা এবং তাৎক্ষণিক এরর লগ করা
+
+      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা এবং এরর ক্যাপচার করা
       - name: Start Docker Containers and Log Errors
         uses: appleboy/ssh-action@v1
         with:
@@ -117,26 +113,22 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # ১৫ মিনিট টাইমআউট রাখলাম, যদিও এইবার আশা করছি না
-          command_timeout: 15m 
+          # 🚨 টাইমআউট 5 মিনিটে সেট করা হয়েছে
+          command_timeout: 5m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
             echo "Starting containers with up -d..."
-            # 🚨 চূড়ান্ত ফিক্স: সেশন ডিসকানেক্টের জন্য nohup ও & ব্যবহার করা হলো
-            # এটি নিশ্চিত করবে যে SSH কমান্ডটি দ্রুত শেষ হয়, এমনকি যদি ডকার ব্যাকগ্রাউন্ডে চলে
-            nohup sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > /dev/null 2>&1 &
-            
-            # অপেক্ষা করা (docker-compose এর কাজ শেষ হওয়ার জন্য সামান্য অপেক্ষা)
-            sleep 10
+            # এই কমান্ডটি এখন সফল হলে তবেই ধাপটি শেষ হবে
+            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
             echo "--- Checking Container Status Immediately ---"
             sudo docker-compose -f docker-compose.production.yml ps
             
             echo "Container startup command finished."
 
-      # Step 8: Run Database Migrations (সংশোধিত ডিবাগিং)
+      # Step 8: Run Database Migrations (ফাইনাল ফিক্সড ভার্সন)
       - name: Run Database Migrations and Debug Logs
         uses: appleboy/ssh-action@v1
         with:
@@ -149,14 +141,13 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Waiting 60 seconds for containers to become fully ready..."
-            sleep 60 
+            echo "Waiting 10 seconds for DB connection establishment..."
+            sleep 10
             
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
             
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              # কন্টেইনারটি পাওয়া গেলে, তার বর্তমান অবস্থা চেক করা
               CONTAINER_STATUS=$(sudo docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
 
               if [ "$CONTAINER_STATUS" = "running" ]; then
