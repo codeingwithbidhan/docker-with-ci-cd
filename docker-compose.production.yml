@@ -19,7 +19,7 @@ services:
     # DB HEALTHY না হওয়া পর্যন্ত অপেক্ষা করবে
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_started
 
   nginx:
     build:
@@ -50,13 +50,6 @@ services:
       - db_data:/var/lib/mysql
     networks:
       - db_network
-    healthcheck:
-      # 🚨 healthcheck এ ইউজারনেম ও পাসওয়ার্ড যোগ করা হলো
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${DB_USERNAME}", "-p${DB_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s 
 
 networks:
   app_network:

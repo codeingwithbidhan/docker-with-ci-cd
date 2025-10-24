@@ -131,8 +131,8 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Waiting 30 seconds for containers to become fully ready..."
-            sleep 30 
+            echo "Waiting 60 seconds for containers to become fully ready..."
+            sleep 60 
             
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
