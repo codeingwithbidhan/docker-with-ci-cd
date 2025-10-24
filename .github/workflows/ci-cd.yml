@@ -51,7 +51,7 @@ jobs:
           source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # 💡 সংশোধিত Step 7: ফাইল চেক ও ইমেজ পুল করা
+      # 💡 সংশোধিত Step 7: ফাইল চেক ও ইমেজ পুল করা (sudo removed)
       - name: Pull Latest Docker Images & Create ENV
         uses: appleboy/ssh-action@v1
         with:
@@ -78,11 +78,13 @@ jobs:
             echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> .env
             echo "DB_ROOT_PASSWORD=${{ secrets.DB_ROOT_PASSWORD }}" >> .env
             
-            sudo docker-compose -f docker-compose.production.yml down || true
-            sudo docker image prune -f || true
+            # SUDO REMOVED
+            docker-compose -f docker-compose.production.yml down || true
+            docker image prune -f || true
             
             echo "Starting Image Pull..."
-            sudo docker-compose -f docker-compose.production.yml pull
+            # SUDO REMOVED
+            docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
       # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা (অপরিবর্তিত)
@@ -100,32 +102,31 @@ jobs:
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
 
-      # 💡 ফিক্সড Step 7.5: নন-ব্লকিং স্টার্ট
-      - name: Start Docker Containers (Non-Blocking)
+      # 💡 চূড়ান্ত ফিক্স Step 7.5: টাইমআউট বাড়ানো এবং SUDO সরানো হলো
+      - name: Start Docker Containers (Extended Timeout)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 টাইমআউট ১ মিনিট যথেষ্ট, কারণ কমান্ডটি তাৎক্ষণিক ব্যাকগ্রাউন্ডে চলে যাবে
-          command_timeout: 1m 
+          # 🚨 চূড়ান্ত টাইমআউট: 10 মিনিট পর্যন্ত অপেক্ষা করবে কন্টেইনার স্টার্ট হওয়ার জন্য
+          command_timeout: 10m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers in background to bypass SSH block..."
-            # 🚨 চূড়ান্ত ফিক্স: nohup ও & ব্যবহার করা হলো। এটি SSH ব্লক এড়িয়ে যাবে।
-            nohup sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > /dev/null 2>&1 &
+            echo "Starting containers with up -d and waiting up to 10 minutes..."
+            # SUDO REMOVED
+            docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
-            echo "Docker Compose started in background. Checking current status..."
-            # তাৎক্ষণিক স্ট্যাটাস চেক
-            sudo docker-compose -f docker-compose.production.yml ps
+            echo "--- Checking Container Status Immediately ---"
+            # SUDO REMOVED
+            docker-compose -f docker-compose.production.yml ps
             
-            echo "Step 7.5 finished successfully (non-blocking)."
-            # এই ধাপটি এখন অবশ্যই টাইমআউট হবে না।
+            echo "Container startup command finished."
 
-      # Step 8: Run Database Migrations (গ্যারান্টেড ওয়েট যুক্ত)
+      # Step 8: Run Database Migrations (SUDO removed)
       - name: Run Database Migrations and Debug Logs
         uses: appleboy/ssh-action@v1
         with:
@@ -138,41 +139,42 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            # 🚨 গ্যারান্টেড ওয়েট: Step 7.5 নন-ব্লকিং হওয়ায়, এই ধাপেই আমরা কন্টেইনার স্টার্টআপের জন্য অপেক্ষা করব।
             echo "Waiting 60 seconds for all containers to fully start and stabilize..."
             sleep 60
             
-            # LARAVEL কন্টেইনারের নাম বের করা
-            LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
+            # LARAVEL কন্টেইনারের নাম বের করা (SUDO REMOVED)
+            LARAVEL_CONTAINER_NAME=$(docker-compose -f docker-compose.production.yml ps -q backend) 
             
             if [ -n "$LARAVEL_CONTAINER_NAME" ]; then
-              CONTAINER_STATUS=$(sudo docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
+              # SUDO REMOVED
+              CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
 
               if [ "$CONTAINER_STATUS" = "running" ]; then
                   echo "Backend container is RUNNING. Running Migrations...";
-                  # DB কানেকশনের জন্য অতিরিক্ত 10 সেকেন্ড অপেক্ষা করা
                   echo "Waiting 10 seconds for DB connection establishment...";
                   sleep 10
                   
-                  sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
-                  sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
+                  # SUDO REMOVED
+                  docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
+                  docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
                   echo "Deployment successful!";
               else
                   echo "Error: Backend container found but status is NOT RUNNING ($CONTAINER_STATUS).";
                   
-                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা
+                  # 🚨 ডিবাগিং: কন্টেইনারটি কেন ব্যর্থ হয়েছে তার লগ প্রিন্ট করা (SUDO REMOVED)
                   echo "--- Printing Backend Container Logs ---"
-                  sudo docker-compose -f docker-compose.production.yml logs backend
+                  docker-compose -f docker-compose.production.yml logs backend
                   
-                  # 🚨 ডিবাগিং: কন্টেইনারের স্ট্যাটাস এবং এক্সিট কোড প্রিন্ট করা
+                  # 🚨 ডিবাগিং: কন্টেইনারের স্ট্যাটাস এবং এক্সিট কোড প্রিন্ট করা (SUDO REMOVED)
                   echo "--- Container Status Check ---"
-                  sudo docker-compose -f docker-compose.production.yml ps
+                  docker-compose -f docker-compose.production.yml ps
                   
                   exit 1;
               fi
             else
               echo "Error: Backend container not found. Checking logs...";
-              sudo docker-compose -f docker-compose.production.yml logs 
-              sudo docker-compose -f docker-compose.production.yml ps
+              # SUDO REMOVED
+              docker-compose -f docker-compose.production.yml logs 
+              docker-compose -f docker-compose.production.yml ps
               exit 1;
             fi
