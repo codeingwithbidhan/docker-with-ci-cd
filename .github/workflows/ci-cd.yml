@@ -100,42 +100,28 @@ jobs:
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
 
-      # 💡 সংশোধিত Step 7.5: নন-ব্লকিং স্টার্ট (nohup ব্যবহার করে)
-      - name: Start Docker Containers (Non-Blocking)
+      # 💡 চূড়ান্ত ফিক্স (Step 7.5): কন্টেইনার স্টার্ট এবং মাইগ্রেশন (Single Blocking Step)
+      - name: Deploy and Run Migrations (15 Min Timeout)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 টাইমআউট 1 মিনিট, কারণ কমান্ডটি অবিলম্বে ব্যাকগ্রাউন্ডে চলে যাবে
-          command_timeout: 1m 
+          # 🚨 চূড়ান্ত টাইমআউট: 15 মিনিট, সম্পূর্ণ স্টার্টআপ এবং মাইগ্রেশনের জন্য।
+          command_timeout: 15m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers using nohup for non-blocking execution..."
-            # 🚨 FIX: nohup ব্যবহার করে ব্যাকগ্রাউন্ডে কমান্ড চালানো হলো এবং আউটপুট লগ ফাইলে রিডাইরেক্ট করা হলো।
-            nohup docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > docker_startup.log 2>&1 &
+            echo "Starting containers (Blocking wait for DB) - up to 15 minutes..."
+            # এই কমান্ডটি depends_on: service_started শর্ত পূরণ না হওয়া পর্যন্ত ব্লক থাকবে।
+            docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
             
-            echo "Non-blocking startup initiated. The next step will wait for containers."
-
-      # Step 8: Run Database Migrations এবং Debug Logs (SUDO removed)
-      - name: Run Database Migrations and Debug Logs
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.AWS_PORT }}
-          command_timeout: 5m
-          
-          script: |
-            cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
+            echo "--- Container Status Check After Startup ---"
+            docker-compose -f docker-compose.production.yml ps
             
-            # 🚨 গ্যারান্টিযুক্ত অপেক্ষা: কন্টেইনার স্টার্ট হওয়ার জন্য 90 সেকেন্ড অপেক্ষা বাড়ানো হলো।
-            echo "Waiting 90 seconds for all containers to fully start and stabilize after non-blocking launch..."
-            sleep 90
+            echo "Containers are up. Running Migrations..."
             
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(docker-compose -f docker-compose.production.yml ps -q backend) 
@@ -144,10 +130,10 @@ jobs:
               CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' $LARAVEL_CONTAINER_NAME)
 
               if [ "$CONTAINER_STATUS" = "running" ]; then
-                  echo "Backend container is RUNNING. Running Migrations...";
-                  echo "Waiting 10 seconds for DB connection establishment...";
+                  echo "Backend container is RUNNING. Waiting 10 seconds for final DB establishment...";
                   sleep 10
                   
+                  # মাইগ্রেশন এবং ক্যাশ ক্লিয়ার
                   docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
                   docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
                   echo "Deployment successful!";
@@ -158,24 +144,11 @@ jobs:
                   echo "--- Printing Backend Container Logs ---"
                   docker-compose -f docker-compose.production.yml logs backend
                   
-                  # 🚨 ডিবাগিং: কন্টেইনারের স্ট্যাটাস এবং এক্সিট কোড প্রিন্ট করা
-                  echo "--- Container Status Check ---"
-                  docker-compose -f docker-compose.production.yml ps
-                  
-                  # 🚨 চূড়ান্ত ডিবাগ: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা
-                  echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
-                  cat docker_startup.log || echo "Startup log file not found."
-
                   exit 1;
               fi
             else
-              echo "Error: Backend container not found. Checking logs...";
-              
-              # 🚨 চূড়ান্ত ডিবাগ: নন-ব্লকিং কমান্ডের আউটপুট প্রিন্ট করা (যখন কোনো কন্টেইনারই তৈরি হয়নি)
-              echo "--- Printing Non-Blocking Startup Log (docker_startup.log) ---"
-              cat docker_startup.log || echo "Startup log file not found."
-              
+              echo "Error: Backend container not found. Containers failed to start after blocking wait.";
+              echo "--- Printing All Container Logs ---"
               docker-compose -f docker-compose.production.yml logs 
-              docker-compose -f docker-compose.production.yml ps
               exit 1;
             fi
