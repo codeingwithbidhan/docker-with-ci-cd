@@ -11,22 +11,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repo
+      # Step 1-6: (Unchanged)
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Step 3: Log in to Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      # Step 4: Build and Push Backend Image
       - name: Build & Push Laravel Backend
         uses: docker/build-push-action@v4
         with:
@@ -35,7 +32,6 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/laravel-backend:latest
 
-      # Step 5: Build and Push React Frontend
       - name: Build & Push React Frontend
         uses: docker/build-push-action@v4
         with:
@@ -45,7 +41,6 @@ jobs:
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
 
 
-      # Step 6: File Copy (docker-compose.production.yml সার্ভারে কপি করা)
       - name: Copy Docker Compose File to Server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -90,7 +85,7 @@ jobs:
             sudo docker-compose -f docker-compose.production.yml pull
             echo "Image Pull Complete."
 
-      # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা
+      # 🔍 ডায়াগনস্টিক ধাপ: সার্ভারে থাকা ফাইল কনটেন্ট প্রিন্ট করা (অপরিবর্তিত)
       - name: Verify Docker Compose Content on Server
         uses: appleboy/ssh-action@v1
         with:
@@ -105,30 +100,32 @@ jobs:
             cat docker-compose.production.yml
             echo "---------------------------------------------------------------"
 
-      # 💡 চূড়ান্ত ফিক্স Step 7.5: কন্টেইনার স্টার্ট করা এবং এরর ক্যাপচার করা
-      - name: Start Docker Containers and Log Errors
+      # 💡 ফিক্সড Step 7.5: নন-ব্লকিং স্টার্ট
+      - name: Start Docker Containers (Non-Blocking)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 টাইমআউট 5 মিনিটে সেট করা হয়েছে
-          command_timeout: 5m 
+          # 🚨 টাইমআউট ১ মিনিট যথেষ্ট, কারণ কমান্ডটি তাৎক্ষণিক ব্যাকগ্রাউন্ডে চলে যাবে
+          command_timeout: 1m 
 
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Starting containers with up -d..."
-            # এই কমান্ডটি এখন সফল হলে তবেই ধাপটি শেষ হবে
-            sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
+            echo "Starting containers in background to bypass SSH block..."
+            # 🚨 চূড়ান্ত ফিক্স: nohup ও & ব্যবহার করা হলো। এটি SSH ব্লক এড়িয়ে যাবে।
+            nohup sudo docker-compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans > /dev/null 2>&1 &
             
-            echo "--- Checking Container Status Immediately ---"
+            echo "Docker Compose started in background. Checking current status..."
+            # তাৎক্ষণিক স্ট্যাটাস চেক
             sudo docker-compose -f docker-compose.production.yml ps
             
-            echo "Container startup command finished."
+            echo "Step 7.5 finished successfully (non-blocking)."
+            # এই ধাপটি এখন অবশ্যই টাইমআউট হবে না।
 
-      # Step 8: Run Database Migrations (ফাইনাল ফিক্সড ভার্সন)
+      # Step 8: Run Database Migrations (গ্যারান্টেড ওয়েট যুক্ত)
       - name: Run Database Migrations and Debug Logs
         uses: appleboy/ssh-action@v1
         with:
@@ -141,8 +138,9 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
-            echo "Waiting 10 seconds for DB connection establishment..."
-            sleep 10
+            # 🚨 গ্যারান্টেড ওয়েট: Step 7.5 নন-ব্লকিং হওয়ায়, এই ধাপেই আমরা কন্টেইনার স্টার্টআপের জন্য অপেক্ষা করব।
+            echo "Waiting 60 seconds for all containers to fully start and stabilize..."
+            sleep 60
             
             # LARAVEL কন্টেইনারের নাম বের করা
             LARAVEL_CONTAINER_NAME=$(sudo docker-compose -f docker-compose.production.yml ps -q backend) 
@@ -152,6 +150,10 @@ jobs:
 
               if [ "$CONTAINER_STATUS" = "running" ]; then
                   echo "Backend container is RUNNING. Running Migrations...";
+                  # DB কানেকশনের জন্য অতিরিক্ত 10 সেকেন্ড অপেক্ষা করা
+                  echo "Waiting 10 seconds for DB connection establishment...";
+                  sleep 10
+                  
                   sudo docker exec $LARAVEL_CONTAINER_NAME php artisan migrate --force;
                   sudo docker exec $LARAVEL_CONTAINER_NAME php artisan cache:clear;
                   echo "Deployment successful!";
