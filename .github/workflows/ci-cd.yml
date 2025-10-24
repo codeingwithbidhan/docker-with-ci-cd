@@ -142,7 +142,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
           # 🚨 TTY Fix: Allocate a pseudo-terminal to avoid non-interactive shell issues and immediate timeouts.
-          tty: true 
+          request_pty: true # Correct parameter for pseudo-terminal allocation.
           # 🚨 দীর্ঘ টাইমআউট (10 মিনিট) সেট করা হলো, যেহেতু এটি একটি ব্লকিং অপারেশন।
           command_timeout: 10m 
 
