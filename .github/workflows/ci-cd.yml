@@ -146,8 +146,16 @@ jobs:
           script: |
             cd /home/${{ secrets.SERVER_USER }}/docker-with-ci-cd
             
+            echo "--- Logging into Docker Hub on Server ---"
+            # 🚨 FIX: Explicitly log in on the remote server using the DOCKER_HUB_TOKEN to ensure pull access under sudo.
+            echo "${{ secrets.DOCKER_HUB_TOKEN }}" | sudo docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin || {
+                echo "FATAL ERROR: Docker login failed on remote server."
+                exit 1
+            }
+            echo "Docker Hub Login Successful."
+            
             echo "--- Starting Containers (Blocking) ---"
-            # 🚨 FIX: --no-build ensures Docker Compose uses the pulled images and avoids the 'Building 0.0s' deadlock.
+            # FIX: --no-build ensures Docker Compose uses the pulled images and avoids the 'Building 0.0s' deadlock.
             sudo /usr/local/bin/docker-compose -f docker-compose.production.yml up -d --no-build || {
                 echo "FATAL ERROR: docker-compose up failed immediately."
                 sudo /usr/local/bin/docker-compose -f docker-compose.production.yml logs
