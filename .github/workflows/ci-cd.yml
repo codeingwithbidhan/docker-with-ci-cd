@@ -48,8 +48,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          # 🚨 FIX: Now copying docker-compose, default.conf.prod, AND Dockerfile.prod from the nginx folder.
-          source: "docker-compose.production.yml nginx/default.conf.prod nginx/Dockerfile.prod" 
+          # 🚨 FINAL FIX: Copying the main docker-compose file AND the entire nginx folder (which contains all necessary files).
+          source: "docker-compose.production.yml nginx" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
       # 💡 Step 7: ফাইল চেক, পারমিশন সেট ও ইমেজ পুল করা 
