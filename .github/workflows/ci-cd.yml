@@ -41,7 +41,7 @@ jobs:
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
 
 
-      - name: Copy Docker Compose File and Nginx Config to Server
+      - name: Copy Docker Compose File
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -49,7 +49,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
           # 🚨 FINAL FIX V2: Making paths explicit with './' to force correct tar resolution.
-          source: "./docker-compose.production.yml ./nginx" 
+          source: "docker-compose.production.yml" 
           target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
       # 💡 Step 7: ফাইল চেক, পারমিশন সেট ও ইমেজ পুল করা 
