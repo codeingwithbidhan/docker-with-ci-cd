@@ -40,6 +40,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/react-frontend:latest
 
+
       - name: Copy Docker Compose File and Nginx Config to Server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -47,11 +48,12 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.AWS_PORT }}
-          source: "docker-compose.production.yml nginx" 
-          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"          
+          # 🚨 FIX: Now copying docker-compose, default.conf.prod, AND Dockerfile.prod from the nginx folder.
+          source: "docker-compose.production.yml nginx/default.conf.prod nginx/Dockerfile.prod" 
+          target: "/home/${{ secrets.SERVER_USER }}/docker-with-ci-cd"
 
-      # 💡 Step 7: ফাইল চেক ও ইমেজ পুল করা (Pull now needs sudo)
-      - name: Pull Latest Docker Images & Create ENV
+      # 💡 Step 7: ফাইল চেক, পারমিশন সেট ও ইমেজ পুল করা 
+      - name: Pull Latest Docker Images & Create ENV (Fixing Permissions)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -70,7 +72,21 @@ jobs:
                 ls -la 
                 exit 1;
             fi
+
+            echo "--- Setting permissions for Nginx config (FIX) ---"
+            # 🚨 FIX: Ensure the Nginx configuration folder and files are readable by the Docker container
+            sudo chmod -R 755 nginx
             
+            echo "--- Correcting Image Names in docker-compose.production.yml ---"
+            # 🚨 FIX: Replaces local image names with full Docker Hub paths, which is mandatory for private/pushed images.
+            sed -i '/backend:/,+1 s/image: .*/image: ${{ secrets.DOCKER_HUB_USERNAME }}\/laravel-backend:latest/g' docker-compose.production.yml
+            sed -i '/nginx:/,+1 s/image: .*/image: ${{ secrets.DOCKER_HUB_USERNAME }}\/react-frontend:latest/g' docker-compose.production.yml
+            
+            echo "Corrected docker-compose file:"
+            cat docker-compose.production.yml
+            echo "------------------------------"
+
+
             echo "Creating .env file from secrets..."
             echo "DB_DATABASE=${{ secrets.DB_DATABASE }}" > .env
             echo "DB_USERNAME=${{ secrets.DB_USERNAME }}" >> .env
