@@ -4,6 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.production
     container_name: laravel_app
+    image: imbidhan/laravel-backend
     restart: always
     working_dir: /var/www
     environment:
@@ -16,7 +17,6 @@ services:
     networks:
       - app_network
       - db_network
-    # DB HEALTHY না হওয়া পর্যন্ত অপেক্ষা করবে
     depends_on:
       db:
         condition: service_started
@@ -34,17 +34,28 @@ services:
       backend:
         condition: service_started
     networks:
-      - app_network   
+      - app_network
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.production
+    container_name: react_app
+    image: imbidhan/react-frontend
+    restart: unless-stopped
+    working_dir: /app
+    networks:
+      - app_network
+    depends_on:
+      - backend
   db:
     image: mysql:8
     container_name: mysql_db_prod
     restart: always
     environment:
-      # 🚨 নতুন ভ্যারিয়েবল যোগ করা হয়েছে: Laravel এর ইউজার ও পাসওয়ার্ড
       MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_USER: ${DB_USERNAME} # DB_USERNAME ব্যবহার করুন
-      MYSQL_PASSWORD: ${DB_PASSWORD} # DB_PASSWORD ব্যবহার করুন
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       - db_data:/var/lib/mysql

@@ -1,15 +1,18 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 
-export default function Navbar() {
+const Navbar = () => {
   return (
-    <nav className="flex items-center justify-between bg-gray-900 text-white px-6 py-3">
-      <h1 className="text-xl font-bold">My App</h1>
-      <ul className="flex gap-6">
-        <li><Link to="/">Home</Link></li>
-        <li><Link to="/users">Users</Link></li>
-        <li><Link to="/products">Products</Link></li>
-        <li><Link to="/about">About</Link></li>
+    <nav className="bg-blue-600 text-white px-6 py-4">
+      <ul className="flex space-x-6">
+        <li><Link to="/" className="hover:text-gray-200">Home</Link></li>
+        <li><Link to="/users" className="hover:text-gray-200">Users</Link></li>
+        <li><Link to="/products" className="hover:text-gray-200">Products</Link></li>
+        <li><Link to="/about" className="hover:text-gray-200">About</Link></li>
       </ul>
     </nav>
   );
-}
+};
+
+export default Navbar;

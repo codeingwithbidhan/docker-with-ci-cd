@@ -5,19 +5,27 @@ import Users from "./pages/Users";
 import Products from "./pages/Products";
 import About from "./pages/About";
 
-export default function App() {
+function App() {
   return (
     <Router>
-      <Navbar />
-      <div className="p-4 md:p-8 max-w-screen-lg mx-auto">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/about" element={<About />} />
-        </Routes>
+      <div className="flex flex-col min-h-screen">
+        {/* Navbar always on top */}
+        <Navbar />
+
+        {/* Content center */}
+        <div className="flex-grow flex items-center justify-center bg-gray-50">
+          <div className="max-w-screen-lg w-full px-4 md:px-8">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/products" element={<Products />} />
+              <Route path="/about" element={<About />} />
+            </Routes>
+          </div>
+        </div>
       </div>
     </Router>
   );
 }
 
+export default App;
