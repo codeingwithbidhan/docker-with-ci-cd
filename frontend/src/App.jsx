@@ -4,6 +4,7 @@ import Home from "./pages/Home";
 import Users from "./pages/Users";
 import Products from "./pages/Products";
 import About from "./pages/About";
+import AIChat from "./pages/AIChat";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
               <Route path="/users" element={<Users />} />
               <Route path="/products" element={<Products />} />
               <Route path="/about" element={<About />} />
+              <Route path="/openai" element={<AIChat />} />
             </Routes>
           </div>
         </div>

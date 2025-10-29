@@ -66,3 +66,33 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* আপনার index.css বা global.css ফাইলে যোগ করুন */
+.markdown-content {
+  padding: 1rem;
+}
+
+/* ReactMarkdown বা সাধারণ Markdown দ্বারা তৈরি আউটপুট */
+.markdown-content ul {
+  list-style-type: disc; /* সাধারণ বুলেট পয়েন্ট */
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content strong {
+  font-weight: 700; /* বোল্ড টেক্সট আরও গাঢ় হবে */
+  color: #4338CA; /* indigo-700 এর কাছাকাছি */
+}
+
+.markdown-content h2, .markdown-content h3 {
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #1F2937; /* Gray-800 */
+}
+
+.markdown-content p {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
